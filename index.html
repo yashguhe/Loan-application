@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Loan Application</title>
+
+  <!--
+    Styling: compact and modern. Comments below explain the purpose of grouped rules.
+    I keep everything in this single file for simplicity (good for small examples and demos).
+  -->
+  <style>
+    /* Reset-ish: box-sizing so padding doesn't surprise layouts; remove default margins */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Page background and base typography */
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      padding: 20px;
+      /* soft purple-blue gradient for friendly, modern feel */
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    /* Card container centered on page */
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    /* Header strip: eye-catching color and clear title area */
+    .header {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: #fff;
+      padding: 28px 22px;
+      text-align: center;
+    }
+    .header h1 { font-size: 26px; margin-bottom: 6px; line-height: 1.1; }
+    .header p  { opacity: 0.95; }
+
+    /* Content area inside the card */
+    .form-container {
+      padding: 36px;
+    }
+
+    /* Spacing for individual input groups */
+    .form-group { margin-bottom: 22px; }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    /* Inputs share a base style for comfortable touch targets */
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"] {
+      width: 100%;
+      padding: 14px 12px;
+      border: 2px solid #e6eaef;
+      border-radius: 10px;
+      font-size: 15px;
+      transition: border-color .18s ease, box-shadow .18s ease, transform .08s ease;
+    }
+
+    /* Focus state that improves clarity when user types */
+    input:focus {
+      outline: none;
+      border-color: #4facfe;
+      box-shadow: 0 0 0 4px rgba(79,172,254,0.08);
+      transform: translateY(-1px);
+    }
+
+    /* Small helper messages */
+    .hint { color: #666; font-size: 13px; margin-top: 6px; }
+    .amount-words { color: #444; font-style: italic; margin-top: 8px; padding: 10px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #4facfe; }
+
+    /* Error and success message styles */
+    .error { color: #e74c3c; font-size: 13px; margin-top: 6px; display: none; }
+    .success { color: #27ae60; font-size: 13px; margin-top: 6px; display: none; }
+
+    /* Primary CTA button */
+    .submit-btn {
+      width: 100%;
+      padding: 16px;
+      color: white;
+      font-weight: 700;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+    }
+    .submit-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(102,126,234,0.18); }
+    .submit-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+    /* Confirmation page (hidden by default) */
+    .page-hidden { display: none; }
+
+    /* OTP box: compact and focused */
+    .otp-container { background: #f8f9fa; padding: 16px; border-radius: 8px; margin-top: 16px; }
+    .otp-input {
+      width: 160px;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 2px solid #e1e5e9;
+    }
+    .validate-btn {
+      margin-left: 12px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      background: linear-gradient(135deg,#56ab2f 0%, #a8e6cf 100%);
+      color: white;
+    }
+
+    .attempts { color: #e74c3c; margin-top: 10px; font-size: 14px; }
+
+    .success-message, .failed-message {
+      text-align: center; padding: 24px; border-radius: 8px; margin-top: 18px; font-weight: 700;
+    }
+    .success-message { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .failed-message  { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+    /* Small responsive tweak for narrow screens */
+    @media (max-width:420px) {
+      .form-container { padding: 22px; }
+      .header { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <!--
+    Main application views:
+    - #loanPage: the form where the user enters their details
+    - #confirmPage: shown after form validation: contains OTP verification
+    We keep both in the DOM and toggle visibility to keep a simple single-page flow.
+  -->
+
+  <!-- Loan Application Page -->
+  <div id="loanPage" class="container" aria-live="polite">
+    <div class="header" role="banner">
+      <h1>💰 Loan Application</h1>
+      <p>Quick, friendly loans — fill the short form below to get started.</p>
+    </div>
+
+    <div class="form-container" role="main">
+      <!--
+        We use semantic form elements. Each input has an associated label and
+        short helper text. IDs are explicit and clear for accessibility and JS.
+      -->
+      <form id="loanForm" novalidate>
+        <div class="form-group">
+          <label for="fullName">Full Name <span aria-hidden="true">*</span></label>
+          <!--
+            We keep type="text" for names (not "name" because it's not an official type).
+            The placeholder gives quick guidance but the label is the authoritative description.
+          -->
+          <input type="text" id="fullName" name="fullName" inputmode="text" autocomplete="name" placeholder="e.g., Rahul Sharma" aria-describedby="nameHint nameError" />
+          <div id="nameHint" class="hint">Please provide your full name — at least two words.</div>
+          <div class="error" id="nameError" role="alert">
+            Please enter at least two words. Each word should be 4+ alphabetic characters.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email Address <span aria-hidden="true">*</span></label>
+          <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" aria-describedby="emailError" />
+          <div class="error" id="emailError" role="alert">Please enter a valid email address.</div>
+        </div>
+
+        <div class="form-group">
+          <label for="pan">PAN Number <span aria-hidden="true">*</span></label>
+          <!-- PAN is alphanumeric. We uppercase automatically in script. maxlength keeps UI tidy. -->
+          <input type="text" id="pan" name="pan" maxlength="10" placeholder="ABCDE1234F" inputmode="latin" aria-describedby="panError" autocomplete="off" />
+          <div class="error" id="panError" role="alert">PAN must be like: ABCDE1234F (5 letters, 4 digits, 1 letter).</div>
+        </div>
+
+        <div class="form-group">
+          <label for="loanAmount">Loan Amount (₹) <span aria-hidden="true">*</span></label>
+          <!-- Use text so we can accept pasted values and format easily; validation is done in JS -->
+          <input type="text" id="loanAmount" name="loanAmount" placeholder="Enter integer amount (max 9 digits)" inputmode="numeric" aria-describedby="amountError amountWords" />
+          <div id="amountError" class="error" role="alert">Please enter a valid amount (1 to 9 digits).</div>
+          <div id="amountWords" class="amount-words" aria-live="polite" style="display:none;"></div>
+        </div>
+
+        <button type="submit" id="submitBtn" class="submit-btn" aria-label="Submit loan application">Submit Application</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirmation / OTP Page (hidden until form validation passes) -->
+  <div id="confirmPage" class="container page-hidden" aria-live="polite">
+    <div class="header" role="banner">
+      <h1>📧 Email Verification</h1>
+      <p>Almost there — verify your email to submit the application.</p>
+    </div>
+
+    <div class="form-container" role="main">
+      <div id="welcomeMessage" style="font-size:16px; margin-bottom:10px;"></div>
+
+      <div id="otpForm" class="otp-container" role="region" aria-label="OTP verification">
+        <label for="otpInput">Enter 4-digit verification code:</label>
+
+        <div style="display:flex; align-items:center; margin-top:10px;">
+          <!-- OTP input accepts only numbers (script enforces) -->
+          <input id="otpInput" class="otp-input" maxlength="4" inputmode="numeric" aria-describedby="attemptsLeft" placeholder="0000" />
+          <button id="validateBtn" class="validate-btn" type="button" aria-label="Validate OTP">Validate</button>
+        </div>
+
+        <div id="attemptsLeft" class="attempts" aria-live="polite"></div>
+      </div>
+
+      <div id="validationResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!--
+    JavaScript: All behavior is here. The comments below are intentionally thorough and human-centered:
+    - explain what each function does,
+    - why certain validations exist,
+    - and how the flow behaves for a real user.
+  -->
+  <script>
+    /* =========================
+       Globals used by the app
+       ========================= */
+
+    // generatedOTP: string holding the 4-digit code we "sent"
+    // attempts: how many times user tried to validate the OTP
+    // maxAttempts: cap on tries to prevent brute force in demo
+    // userFirstName: shown on the confirmation page for personalization
+    let generatedOTP = '';
+    let attempts = 0;
+    const maxAttempts = 3;
+    let userFirstName = '';
+
+    /* =========================
+       Utility: Convert numbers to Indian-style words
+       - Purpose: show "amount in words" so user can feel confident
+       - Works with integers up to 9 digits (as per UI constraint)
+       - Implementation notes provided inline for clarity
+       ========================= */
+    function numberToWords(num) {
+      // Defensive: treat non-number as zero; the caller handles validation
+      if (typeof num !== 'number' || isNaN(num) || num === 0) return 'Zero Rs.';
+
+      // Word buckets for units and special cases
+      const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+      const teens = ['Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+      const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+      // Converts numbers from 0..999 into words using above buckets
+      function convertHundreds(n) {
+        let result = '';
+        // Hundreds place
+        if (n >= 100) {
+          result += ones[Math.floor(n / 100)] + ' Hundred ';
+          n = n % 100;
+        }
+        // Tens and teens
+        if (n >= 20) {
+          result += tens[Math.floor(n / 10)] + ' ';
+          n = n % 10;
+        } else if (n >= 10) {
+          result += teens[n - 10] + ' ';
+          n = 0;
+        }
+        // Units
+        if (n > 0) {
+          result += ones[n] + ' ';
+        }
+        return result;
+      }
+
+      let result = '';
+
+      // Crore (10^7)
+      const crore = Math.floor(num / 10000000);
+      if (crore > 0) {
+        result += convertHundreds(crore) + 'Crore ';
+        num = num % 10000000;
+      }
+
+      // Lakh (10^5)
+      const lakh = Math.floor(num / 100000);
+      if (lakh > 0) {
+        result += convertHundreds(lakh) + 'Lakh ';
+        num = num % 100000;
+      }
+
+      // Thousand
+      const thousand = Math.floor(num / 1000);
+      if (thousand > 0) {
+        result += convertHundreds(thousand) + 'Thousand ';
+        num = num % 1000;
+      }
+
+      // Remaining 0..999
+      if (num > 0) {
+        result += convertHundreds(num);
+      }
+
+      // Trim and append currency marker
+      return result.trim() + ' Rs.';
+    }
+
+    /* =========================
+       Validation helpers
+       These are deliberately explicit and readable so a junior dev can follow easily.
+       Each function returns true when the input is considered valid.
+       ========================= */
+
+    // Name rule: at least two words, each word >= 4 letters, alphabetic only.
+    function validateName(name) {
+      if (!name || typeof name !== 'string') return false;
+      const words = name.trim().split(/\s+/);
+      if (words.length < 2) return false;
+      for (const w of words) {
+        // Only letters allowed; minimum length per name chunk is 4
+        if (w.length < 4 || !/^[a-zA-Z]+$/.test(w)) return false;
+      }
+      return true;
+    }
+
+    // Simple but effective email pattern (not bulletproof, but fine for demo)
+    function validateEmail(email) {
+      if (!email || typeof email !== 'string') return false;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    // PAN validation: 5 uppercase letters, 4 digits, 1 uppercase letter.
+    // We will uppercase the user input before testing so casing is not an issue for them.
+    function validatePAN(pan) {
+      if (!pan || typeof pan !== 'string') return false;
+      return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan);
+    }
+
+    // Allow only positive integer amounts up to 9 digits (1..999,999,999)
+    function validateAmount(amount) {
+      if (!amount || typeof amount !== 'string') return false;
+      // remove common separators like commas to be a little forgiving
+      const cleaned = amount.replace(/,/g, '');
+      if (!/^\d{1,9}$/.test(cleaned)) return false;
+      const val = parseInt(cleaned, 10);
+      return val > 0;
+    }
+
+    /* =========================
+       DOM helpers to show/hide messages and update UI
+       Keep small wrappers so code that calls them is expressive and readable.
+       ========================= */
+    function showError(id, show = true) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = show ? 'block' : 'none';
+    }
+    function setAmountWords(text) {
+      const el = document.getElementById('amountWords');
+      el.innerHTML = `<strong>Amount in words:</strong> ${text}`;
+      el.style.display = 'block';
+    }
+    function hideAmountWords() {
+      const el = document.getElementById('amountWords');
+      el.style.display = 'none';
+      el.innerHTML = '';
+    }
+
+    /* =========================
+       Event wiring: real-time validation for better UX
+       We attach listeners and show inline errors while typing — this helps users fix mistakes quickly.
+       ========================= */
+
+    // NAME input: show guidance/error while typing
+    document.getElementById('fullName').addEventListener('input', function () {
+      const name = this.value;
+      if (name && !validateName(name)) {
+        showError('nameError', true);
+      } else {
+        showError('nameError', false);
+      }
+    });
+
+    // EMAIL input: show error when syntax is wrong
+    document.getElementById('email').addEventListener('input', function () {
+      const email = this.value;
+      if (email && !validateEmail(email)) {
+        showError('emailError', true);
+      } else {
+        showError('emailError', false);
+      }
+    });
+
+    // PAN input: uppercase as the user types and validate quickly
+    document.getElementById('pan').addEventListener('input', function () {
+      const pan = (this.value || '').toUpperCase();
+      // keep the uppercase value visible to the user
+      this.value = pan;
+      if (pan && !validatePAN(pan)) {
+        showError('panError', true);
+      } else {
+        showError('panError', false);
+      }
+    });
+
+    // LOAN AMOUNT input: show amount in words when valid
+    document.getElementById('loanAmount').addEventListener('input', function () {
+      const amountRaw = this.value.trim();
+      if (amountRaw && validateAmount(amountRaw)) {
+        showError('amountError', false);
+        // convert cleaned integer to words
+        const cleaned = amountRaw.replace(/,/g, '');
+        const words = numberToWords(parseInt(cleaned, 10));
+        setAmountWords(words);
+      } else {
+        if (amountRaw) showError('amountError', true);
+        else showError('amountError', false);
+        hideAmountWords();
+      }
+    });
+
+    /* =========================
+       Form submission flow
+       - Validate all fields
+       - If valid: generate a 4-digit OTP, switch to confirmation view and show personalized message
+       - The OTP is logged to console (demo purpose). In a real app you would send via backend email/SMS.
+       ========================= */
+    document.getElementById('loanForm').addEventListener('submit', function (evt) {
+      evt.preventDefault(); // single-page flow, prevents navigation/reload
+
+      // Collect values (trim to avoid accidental spaces)
+      const fullNameVal = document.getElementById('fullName').value.trim();
+      const emailVal = document.getElementById('email').value.trim();
+      const panVal = (document.getElementById('pan').value || '').trim().toUpperCase();
+      const loanAmountVal = document.getElementById('loanAmount').value.trim().replace(/,/g, '');
+
+      // Validate each field and show inline errors
+      let ok = true;
+      if (!validateName(fullNameVal)) { showError('nameError', true); ok = false; } else showError('nameError', false);
+      if (!validateEmail(emailVal)) { showError('emailError', true); ok = false; } else showError('emailError', false);
+      if (!validatePAN(panVal)) { showError('panError', true); ok = false; } else showError('panError', false);
+      if (!validateAmount(loanAmountVal)) { showError('amountError', true); ok = false; } else showError('amountError', false);
+
+      if (!ok) {
+        // If anything failed, focus the first invalid field to be user-friendly
+        const firstInvalid = document.querySelector('.error[style*="display: block;"]');
+        if (firstInvalid) {
+          const associatedId = firstInvalid.previousElementSibling && firstInvalid.previousElementSibling.id;
+          if (associatedId) document.getElementById(associatedId).focus();
+        }
+        return;
+      }
+
+      // Passed validation: generate OTP (demo-only)
+      generatedOTP = Math.floor(1000 + Math.random() * 9000).toString();
+      // Log OTP so developer/tester can use it in demo (in prod you'd email it instead)
+      console.log('Generated OTP (demo):', generatedOTP);
+
+      // Personalize welcome using first word of the name
+      userFirstName = fullNameVal.split(/\s+/)[0];
+
+      // Switch views: hide form and show confirmation
+      document.getElementById('loanPage').classList.add('page-hidden');
+      document.getElementById('confirmPage').classList.remove('page-hidden');
+
+      // User-friendly message describing next step
+      document.getElementById('welcomeMessage').innerHTML = `
+        <p style="font-size:15px; margin:0 0 8px 0;">Dear <strong>${escapeHtml(userFirstName)}</strong>,</p>
+        <p style="margin:0;">
+          A 4-digit verification code has been sent to your email:
+          <strong>${escapeHtml(emailVal)}</strong>.
+          Enter it below to complete your application.
+        </p>
+      `;
+
+      // Reset OTP attempt counters and UI
+      attempts = 0;
+      updateAttemptsDisplay();
+      // Focus the OTP input for convenience
+      setTimeout(() => document.getElementById('otpInput').focus(), 150);
+    });
+
+    /* =========================
+       OTP validation handlers
+       - Validates the 4-digit code
+       - Allows up to maxAttempts tries, then shows failure
+       - On success, shows friendly success message and optional redirect note
+       ========================= */
+    document.getElementById('validateBtn').addEventListener('click', function () {
+      const entered = (document.getElementById('otpInput').value || '').trim();
+
+      // Quick check: must be 4 digits numeric
+      if (!/^\d{4}$/.test(entered)) {
+        // Mixture of UX choices: highlight the border briefly, and show a small message
+        document.getElementById('otpInput').style.borderColor = '#e74c3c';
+        setTimeout(() => { document.getElementById('otpInput').style.borderColor = '#e1e5e9'; }, 1400);
+        attempts++;
+        updateAttemptsDisplay();
+        checkAttemptsExceeded();
+        return;
+      }
+
+      // Successful (matches generated OTP)
+      if (entered === generatedOTP) {
+        // Hide OTP form and show confirmation content
+        document.getElementById('otpForm').style.display = 'none';
+        document.getElementById('validationResult').innerHTML = `
+          <div class="success-message" role="status">
+            <h2 style="margin:0 0 8px 0;">✅ Validation Successful!</h2>
+            <p style="margin:0;">Your loan application has been submitted. Our team will contact you soon.</p>
+          </div>
+        `;
+        // Optional: in real site, you'd now send the application to a backend and then redirect or show next steps.
+        return;
+      }
+
+      // If code doesn't match, count attempt and show friendly failure UX
+      attempts++;
+      updateAttemptsDisplay();
+      checkAttemptsExceeded();
+
+      // Clear the input so the user can try again
+      document.getElementById('otpInput').value = '';
+      // Briefly flash the red border to indicate error
+      document.getElementById('otpInput').style.borderColor = '#e74c3c';
+      setTimeout(() => { document.getElementById('otpInput').style.borderColor = '#e1e5e9'; }, 900);
+    });
+
+    /* Helper: if attempts exceed limit, show final message and stop allowing attempts */
+    function checkAttemptsExceeded() {
+      if (attempts >= maxAttempts) {
+        document.getElementById('otpForm').style.display = 'none';
+        document.getElementById('validationResult').innerHTML = `
+          <div class="failed-message" role="alert">
+            <h2 style="margin:0 0 8px 0;">❌ Validation Failed</h2>
+            <p style="margin:0;">You have exceeded the maximum attempts. Please contact customer support.</p>
+          </div>
+        `;
+      }
+    }
+
+    /* updateAttemptsDisplay: keeps the user informed how many tries are left */
+    function updateAttemptsDisplay() {
+      const remaining = Math.max(0, maxAttempts - attempts);
+      const el = document.getElementById('attemptsLeft');
+      el.textContent = attempts > 0 && remaining > 0 ? `Attempts remaining: ${remaining}` : '';
+    }
+
+    /* Allow pressing Enter in the OTP box to validate (nice UX) */
+    document.getElementById('otpInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('validateBtn').click();
+      }
+    });
+
+    /* Only numeric characters allowed in OTP input (small polishing behavior) */
+    document.getElementById('otpInput').addEventListener('input', function () {
+      this.value = this.value.replace(/[^0-9]/g, '');
+    });
+
+    /* =========================
+       Small utility: escapeHtml to avoid injecting arbitrary HTML into our messages
+       This is a simple, defensive helper used when echoing user-supplied content in the UI.
+       ========================= */
+    function escapeHtml(unsafe) {
+      return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    
+  </script>
+</body>
+</html>
